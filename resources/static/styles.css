@@ -1,0 +1,219 @@
+/* SPDX-FileCopyrightText: 2023 Emmanuel Salomon <emmanuel.salomon@gmail.com> */
+/* SPDX-License-Identifier: MIT */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+:root {
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+/* Shared input style */
+.umamurl-input {
+  flex: 1;
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid #374151;
+  background-color: #1f2937;
+  color: #f3f4f6;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.umamurl-input::placeholder {
+  color: #6b7280;
+}
+.umamurl-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+/* Shared select style */
+.umamurl-select {
+  border-radius: 0.5rem;
+  border: 1px solid #374151;
+  background-color: #1f2937;
+  color: #f3f4f6;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.umamurl-select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+/* Shared dialog style */
+.umamurl-dialog {
+  border-radius: 0.75rem;
+  border: 1px solid #374151;
+  background-color: #111827;
+  color: #f3f4f6;
+  padding: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  width: 100%;
+}
+.umamurl-dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+/* Header blur */
+.header-blur {
+  background-color: rgba(17, 24, 39, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Table row borders */
+#url-table tr {
+  border-bottom: 1px solid #1f2937;
+}
+#url-table tr:last-child {
+  border-bottom: none;
+}
+
+/* Table row hover */
+#url-table tr:hover {
+  background-color: rgba(31, 41, 55, 0.5);
+}
+
+/* SVG buttons in table */
+.action-btn {
+  padding: 0.375rem;
+  border-radius: 0.5rem;
+  color: #9ca3af;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+.action-btn:hover {
+  color: #f3f4f6;
+  background-color: #374151;
+}
+.action-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.action-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: block;
+}
+
+/* Expiry tooltip */
+.expiry-tooltip {
+  position: relative;
+  cursor: help;
+}
+.expiry-tooltip .expiry-tooltiptext {
+  visibility: hidden;
+  background-color: #1f2937;
+  color: #f3f4f6;
+  text-align: center;
+  padding: 0.4em 0.8em;
+  border-radius: 0.5em;
+  font-size: 0.75rem;
+  position: absolute;
+  z-index: 10;
+  bottom: calc(100% + 0.5em);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.expiry-tooltip .expiry-tooltiptext::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -0.3em;
+  border-width: 0.3em;
+  border-style: solid;
+  border-color: #1f2937 transparent transparent transparent;
+}
+.expiry-tooltip:hover .expiry-tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* QR code dialog */
+#qr-code-dialog {
+  position: relative;
+  background-color: white;
+}
+.qr-button {
+  background-color: transparent;
+  color: #374151;
+  border: none;
+  position: absolute;
+  top: 0.5em;
+  right: 0.5em;
+  cursor: pointer;
+  padding: 0.25em;
+  border-radius: 0.375em;
+}
+.qr-button:hover {
+  background-color: #f3f4f6;
+}
+.qr-button svg {
+  height: 1.5em;
+}
+#qr-download {
+  right: 2.5em;
+  text-decoration: none;
+}
+
+/* Alert box */
+#alert-box:empty,
+#alert-box:not([style]) {
+  display: none;
+}
+
+/* Container blur for dialogs */
+.container-blur {
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+/* Mobile responsive table */
+@media (max-width: 640px) {
+  #links-table thead {
+    display: none;
+  }
+
+  #links-table tbody tr {
+    display: block;
+    padding: 0.75rem 1rem;
+  }
+
+  #links-table tbody td {
+    display: flex;
+    padding: 0.25rem 0 !important;
+  }
+
+  #links-table tbody td::before {
+    content: attr(label);
+    font-weight: 600;
+    font-size: 0.75rem;
+    color: #6b7280;
+    min-width: 5em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    align-content: center;
+  }
+
+  #links-table tbody td[name="numColumn"] {
+    display: none;
+  }
+
+  #links-table tbody td[name="actions"] {
+    justify-content: flex-start;
+  }
+  #links-table tbody td[name="actions"] > div {
+    justify-content: flex-start !important;
+  }
+}

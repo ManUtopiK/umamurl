@@ -1,0 +1,371 @@
+// SPDX-FileCopyrightText: 2023 Emmanuel Salomon <emmanuel.salomon@gmail.com>
+// SPDX-License-Identifier: MIT
+
+use log::{error, info};
+use rusqlite::{fallible_iterator::FallibleIterator, Connection};
+use serde::Serialize;
+use std::rc::Rc;
+
+use crate::services::UmamurlError::{self, ClientError, ServerError};
+
+// Struct for encoding a DB row
+#[derive(Serialize)]
+pub struct DBRow {
+    shortlink: String,
+    longlink: String,
+    expiry_time: i64,
+}
+
+// Find a single URL for /api/expand
+pub fn find_url(shortlink: &str, db: &Connection) -> Result<(String, i64), UmamurlError> {
+    // Long link, expiry time
+    let now = chrono::Utc::now().timestamp();
+    let query = "SELECT long_url, expiry_time FROM urls
+                 WHERE short_url = ?1
+                 AND (expiry_time = 0 OR expiry_time > ?2)";
+    let Ok(mut statement) = db.prepare_cached(query) else {
+        error!("Error preparing SQL statement for find_url.");
+        return Err(ServerError);
+    };
+    statement
+        .query_row((shortlink, now), |row| {
+            Ok((
+                row.get("long_url")?,
+                row.get("expiry_time")?,
+            ))
+        })
+        .map_err(|_| UmamurlError::ClientError {
+            reason: "The shortlink does not exist on the server!".to_string(),
+        })
+}
+
+// Get all URLs in DB
+pub fn getall(
+    db: &Connection,
+    page_after: Option<&str>,
+    page_no: Option<i64>,
+    page_size: Option<i64>,
+) -> Rc<[DBRow]> {
+    let now = chrono::Utc::now().timestamp();
+    let query = if page_after.is_some() {
+        "SELECT short_url, long_url, expiry_time FROM (
+            SELECT t.id, t.short_url, t.long_url, t.expiry_time FROM urls AS t
+            JOIN urls AS u ON u.short_url = ?1
+            WHERE t.id < u.id AND (t.expiry_time = 0 OR t.expiry_time > ?2)
+            ORDER BY t.id DESC LIMIT ?3
+         ) ORDER BY id ASC"
+    } else if page_no.is_some() {
+        "SELECT short_url, long_url, expiry_time FROM (
+            SELECT id, short_url, long_url, expiry_time FROM urls
+            WHERE expiry_time= 0 OR expiry_time > ?1
+            ORDER BY id DESC LIMIT ?2 OFFSET ?3
+         ) ORDER BY id ASC"
+    } else if page_size.is_some() {
+        "SELECT short_url, long_url, expiry_time FROM (
+            SELECT id, short_url, long_url, expiry_time FROM urls
+            WHERE expiry_time = 0 OR expiry_time > ?1
+            ORDER BY id DESC LIMIT ?2
+         ) ORDER BY id ASC"
+    } else {
+        "SELECT short_url, long_url, expiry_time
+         FROM urls WHERE expiry_time = 0 OR expiry_time > ?1
+         ORDER BY id ASC"
+    };
+    let Ok(mut statement) = db.prepare_cached(query) else {
+        error!("Error preparing SQL statement for getall.");
+        return [].into();
+    };
+
+    let raw_data = if let Some(pos) = page_after {
+        let size = page_size.unwrap_or(10);
+        statement.query((pos, now, size))
+    } else if let Some(num) = page_no {
+        let size = page_size.unwrap_or(10);
+        statement.query((now, size, (num - 1) * size))
+    } else if let Some(size) = page_size {
+        statement.query((now, size))
+    } else {
+        statement.query([now])
+    };
+
+    let Ok(data) = raw_data else {
+        error!("Error running SQL statement for getall: {query}");
+        return [].into();
+    };
+
+    let links: Rc<[DBRow]> = data
+        .map(|row| {
+            Ok(DBRow {
+                shortlink: row.get("short_url")?,
+                longlink: row.get("long_url")?,
+                expiry_time: row.get("expiry_time")?,
+            })
+        })
+        .collect()
+        .unwrap_or_else(|err| {
+            error!("Error processing fetched rows: {err}");
+            [].into()
+        });
+
+    links
+}
+
+// Find the long URL for a given shortlink during redirect
+pub fn find_url_for_redirect(shortlink: &str, db: &Connection) -> Result<String, ()> {
+    let now = chrono::Utc::now().timestamp();
+    let Ok(mut statement) = db.prepare_cached(
+        "SELECT long_url FROM urls
+             WHERE short_url = ?1 AND (expiry_time = 0 OR expiry_time > ?2)",
+    ) else {
+        error!("Error preparing SQL statement for find_url_for_redirect.");
+        return Err(());
+    };
+    statement
+        .query_row((shortlink, now), |row| row.get("long_url"))
+        .map_err(|_| ())
+}
+
+// Insert a new link
+pub fn add_link(
+    shortlink: &str,
+    longlink: &str,
+    expiry_delay: i64,
+    db: &Connection,
+) -> Result<i64, UmamurlError> {
+    let now = chrono::Utc::now().timestamp();
+    let expiry_time = if expiry_delay == 0 {
+        0
+    } else {
+        now + expiry_delay
+    };
+
+    let Ok(mut statement) = db.prepare_cached(
+        "INSERT INTO urls
+             (long_url, short_url, expiry_time)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(short_url) DO UPDATE
+             SET long_url = ?1, expiry_time = ?3
+             WHERE short_url = ?2 AND expiry_time <= ?4 AND expiry_time > 0",
+    ) else {
+        error!("Error preparing SQL statement for add_link.");
+        return Err(ServerError);
+    };
+    match statement.execute((longlink, shortlink, expiry_time, now)) {
+        Ok(1) => Ok(expiry_time),
+        Ok(_) => Err(ClientError {
+            reason: "Short URL is already in use!".to_string(),
+        }),
+        Err(e) => {
+            error!("There was some error while adding the link ({shortlink}, {longlink}, {expiry_delay}): {e}");
+            Err(ServerError)
+        }
+    }
+}
+
+// Edit an existing link
+pub fn edit_link(
+    shortlink: &str,
+    longlink: &str,
+    db: &Connection,
+) -> Result<usize, ()> {
+    let now = chrono::Utc::now().timestamp();
+    let query = "UPDATE urls
+         SET long_url = ?1
+         WHERE short_url = ?2 AND (expiry_time = 0 OR expiry_time > ?3)";
+    let Ok(mut statement) = db.prepare_cached(query) else {
+        error!("Error preparing SQL statement for edit_link.");
+        return Err(());
+    };
+
+    statement
+        .execute((longlink, shortlink, now))
+        .inspect_err(|err| {
+            error!(
+                "Got an error while editing link ({shortlink}, {longlink}): {err}"
+            );
+        })
+        .map_err(|_| ())
+}
+
+// Clean expired links
+pub fn cleanup(db: &Connection, use_wal_mode: bool) {
+    let now = chrono::Utc::now().timestamp();
+    info!("Starting database cleanup.");
+
+    let mut statement = db
+        .prepare_cached("DELETE FROM urls WHERE ?1 >= expiry_time AND expiry_time > 0")
+        .expect("Error preparing SQL statement for cleanup.");
+    statement
+        .execute([now])
+        .inspect(|&u| match u {
+            0 => (),
+            1 => info!("1 link was deleted."),
+            _ => info!("{u} links were deleted."),
+        })
+        .expect("Error cleaning expired links.");
+
+    if use_wal_mode {
+        let mut pragma_statement = db
+            .prepare_cached("PRAGMA wal_checkpoint(TRUNCATE)")
+            .expect("Error preparing SQL statement for pragma: wal_checkpoint.");
+        pragma_statement
+            .query_one([], |row| row.get::<usize, isize>(1))
+            .ok()
+            .filter(|&v| v != -1)
+            .expect("Unable to create WAL checkpoint.");
+    }
+    let mut pragma_statement = db
+        .prepare_cached("PRAGMA optimize")
+        .expect("Error preparing SQL statement for pragma: optimize.");
+    pragma_statement
+        .execute([])
+        .expect("Unable to optimize database.");
+    info!("Optimized database.")
+}
+
+// Delete an existing link
+pub fn delete_link(shortlink: &str, db: &Connection) -> Result<(), UmamurlError> {
+    let Ok(mut statement) = db.prepare_cached("DELETE FROM urls WHERE short_url = ?1") else {
+        error!("Error preparing SQL statement for delete_link.");
+        return Err(ServerError);
+    };
+    match statement.execute([shortlink]) {
+        Ok(delta) if delta > 0 => Ok(()),
+        _ => Err(ClientError {
+            reason: "The shortlink was not found, and could not be deleted.".to_string(),
+        }),
+    }
+}
+
+// Get a setting from the settings table
+pub fn get_setting(key: &str, db: &Connection) -> Option<String> {
+    db.prepare_cached("SELECT value FROM settings WHERE key = ?1")
+        .ok()?
+        .query_row([key], |row| row.get(0))
+        .ok()
+}
+
+// Set a setting in the settings table
+pub fn set_setting(key: &str, value: &str, db: &Connection) -> Result<(), ()> {
+    db.prepare_cached(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = ?2",
+    )
+    .map_err(|e| {
+        error!("Error preparing SQL statement for set_setting: {e}");
+    })?
+    .execute((key, value))
+    .map_err(|e| {
+        error!("Error setting {key}: {e}");
+    })
+    .map(|_| ())
+}
+
+pub fn open_db(path: &str, use_wal_mode: bool, ensure_acid: bool) -> Connection {
+    const APPLICATION_ID: u32 = 0x63686874; // Hex for chht, MUST NEVER BE CHANGED
+    const USER_VERSION: u32 = 1; // Should be incremented on change of schema
+
+    let db = Connection::open(path).expect("Unable to open database!");
+
+    let table_exists = db
+        .query_row_and_then(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'urls'",
+            [],
+            |row| row.get::<usize, isize>(0),
+        )
+        // It would be 0 if table does not exist, and 1 if it does
+        .expect("Error querying existence of table.")
+        == 1;
+
+    let current_user_version: u32 = if !table_exists {
+        // It would mean that the table is newly created i.e. has the desired schema
+        USER_VERSION
+    } else {
+        db.query_row_and_then("SELECT user_version FROM pragma_user_version", [], |row| {
+            row.get(0)
+        })
+        .unwrap_or_default()
+    };
+
+    let current_application_id: u32 = db
+        .query_row_and_then(
+            "SELECT application_id FROM pragma_application_id",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+    if current_application_id > 0 || (table_exists && current_user_version > 1) {
+        assert_eq!(
+            current_application_id, APPLICATION_ID,
+            "Incorrect application_id: The database file seems to belong to some other application."
+        )
+    }
+
+    // Create table if it doesn't exist
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS urls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            long_url TEXT NOT NULL,
+            short_url TEXT NOT NULL,
+            expiry_time INTEGER NOT NULL DEFAULT 0
+         )",
+        [],
+    )
+    .expect("Unable to initialize empty database.");
+
+    // Create index on short_url for faster lookups
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_short_url ON urls (short_url)",
+        [],
+    )
+    .expect("Unable to create index on short_url.");
+
+    // The migrations have finished successfully by this point
+    if !table_exists || current_user_version < USER_VERSION {
+        db.pragma_update(None, "user_version", USER_VERSION)
+            .expect("Unable to set pragma: user_version.");
+        db.pragma_update(None, "application_id", APPLICATION_ID)
+            .expect("Unable to set pragma: application_id.");
+    }
+
+    // Create settings table for runtime configuration
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+         )",
+        [],
+    )
+    .expect("Unable to create settings table.");
+
+    // Create index on expiry_time for faster lookups
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expiry_time ON urls (expiry_time)",
+        [],
+    )
+    .expect("Unable to create index on expiry_time.");
+
+    // Set WAL mode if specified
+    let (journal_mode, synchronous) = match (use_wal_mode, ensure_acid) {
+        (true, false) => ("WAL", "NORMAL"),
+        (true, true) => ("WAL", "FULL"),
+        (false, false) => ("DELETE", "FULL"),
+        (false, true) => ("DELETE", "EXTRA"),
+    };
+    db.pragma_update(None, "journal_mode", journal_mode)
+        .expect("Unable to set pragma: journal_mode.");
+    db.pragma_update(None, "synchronous", synchronous)
+        .expect("Unable to set pragma: synchronous.");
+    // Set some further optimizations and run vacuum
+    db.pragma_update(None, "temp_store", "memory")
+        .expect("Unable to set pragma: temp_store.");
+    db.pragma_update(None, "journal_size_limit", "8388608")
+        .expect("Unable to set pragma: journal_size_limit.");
+    db.pragma_update(None, "mmap_size", "16777216")
+        .expect("Unable to set pragma: mmap_size.");
+    db.execute("VACUUM", []).expect("Unable to vacuum database");
+    db.execute("PRAGMA optimize=0x10002", [])
+        .expect("Error running pragma optimize.");
+
+    db
+}

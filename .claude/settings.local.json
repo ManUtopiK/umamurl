@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(command -v convert)",
+      "Bash(convert --version)",
+      "Bash(nix-shell:*)"
+    ]
+  }
+}

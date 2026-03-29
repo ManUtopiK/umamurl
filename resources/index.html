@@ -1,0 +1,418 @@
+<!-- SPDX-FileCopyrightText: 2023 Emmanuel Salomon <emmanuel.salomon@gmail.com> -->
+<!-- SPDX-License-Identifier: MIT -->
+
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
+    />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+
+    <title>Umamurl</title>
+
+    <meta
+      name="description"
+      content="A simple selfhosted URL shortener with no unnecessary features."
+    />
+    <meta property="og:title" content="Umamurl" />
+    <meta
+      property="og:description"
+      content="A simple selfhosted URL shortener with no unnecessary features."
+    />
+
+    <meta
+      name="keywords"
+      content="url shortener, link shortener, self hosted, open source"
+    />
+    <link
+      rel="icon"
+      type="image/x-icon"
+      href="assets/favicon.ico"
+      sizes="any"
+    />
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+    <link
+      rel="icon"
+      type="image/png"
+      href="assets/favicon-32.png"
+      sizes="32x32"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      href="assets/favicon-196.png"
+      sizes="196x196"
+    />
+
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+      async
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/punycode-okam@1.4.1/punycode.min.js"
+      async
+    ></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css"
+      integrity="sha512-wnea99uKIC3TJF7v4eKk4Y+lMz2Mklv18+r4na2Gn1abDRPPOeef95xTzdwGD9e6zXJBteMIhZ1+68QC5byJZw=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <script src="static/script.js" defer></script>
+    <link rel="stylesheet" type="text/css" href="static/styles.css" />
+  </head>
+
+  <body class="min-h-screen bg-gray-900 text-gray-100 font-sans">
+    <!-- Top bar -->
+    <header class="sticky top-0 z-10 header-blur border-b border-gray-800">
+      <div
+        class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between"
+      >
+        <div class="flex items-center space-x-2">
+          <img src="assets/favicon.svg" alt="umamurl-logo" class="h-7 w-7" />
+          <span class="text-xl font-bold tracking-tight">Umamurl</span>
+        </div>
+        <div class="flex items-center space-x-3">
+          <button
+            class="text-gray-400 hover:text-gray-200 bg-transparent border-none cursor-pointer"
+            id="settings-button"
+            title="Settings"
+            hidden
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+          <button
+            class="text-sm text-blue-400 hover:underline cursor-pointer bg-transparent border-none"
+            id="admin-button"
+            hidden
+          >
+            login
+          </button>
+          <a
+            id="version-number"
+            href="https://github.com/ManUtopiK/umamurl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-xs text-gray-500 hover:text-gray-300"
+            hidden
+            >Source Code</a
+          >
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 py-8" id="container">
+      <!-- Add URL form -->
+      <form
+        name="new-url-form"
+        class="bg-gray-800 bg-opacity-50 rounded-xl border border-gray-700 p-6 mb-8"
+      >
+        <div class="space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+            <label
+              for="longUrl"
+              class="sm:w-36 text-sm font-medium text-gray-400 flex-shrink-0"
+              >Long URL</label
+            >
+            <input
+              type="url"
+              name="longUrl"
+              id="longUrl"
+              placeholder="https://example.com/very-long-url"
+              required
+              class="umamurl-input"
+            />
+          </div>
+          <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+            <label
+              for="shortUrl"
+              class="sm:w-36 text-sm font-medium text-gray-400 flex-shrink-0"
+              >Short URL
+              <span class="text-gray-600 font-normal">(optional)</span></label
+            >
+            <input
+              type="text"
+              name="shortUrl"
+              id="shortUrl"
+              placeholder="Only a-z, 0-9, - and _ are allowed"
+              pattern="[a-z0-9\-_]+"
+              title="Only a-z, 0-9, - and _ are allowed"
+              autocapitalize="off"
+              class="umamurl-input"
+            />
+          </div>
+          <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+            <label
+              for="expiryDelay"
+              class="sm:w-36 text-sm font-medium text-gray-400 flex-shrink-0"
+              >Expiry</label
+            >
+            <select
+              name="expiryDelay"
+              id="expiryDelay"
+              class="umamurl-select"
+            >
+              <option value="0">Never</option>
+              <option value="600">10 Minutes</option>
+              <option value="1800">30 Minutes</option>
+              <option value="3600">1 Hour</option>
+              <option value="43200">12 Hours</option>
+              <option value="86400">1 Day</option>
+              <option value="604800">1 Week</option>
+              <option value="2592000">1 Month</option>
+              <option value="7776000">3 Months</option>
+              <option value="15552000">6 Months</option>
+              <option value="31536000">1 Year</option>
+            </select>
+          </div>
+          <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+            <div class="sm:w-36 flex-shrink-0"></div>
+            <div class="flex items-center space-x-4">
+              <button
+                class="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 text-sm font-medium transition-colors cursor-pointer"
+              >
+                Shorten!
+              </button>
+              <div id="alert-box" class="text-sm rounded-lg px-3 py-1"></div>
+            </div>
+          </div>
+        </div>
+      </form>
+
+      <!-- Links table -->
+      <p id="loading-text" class="text-center text-gray-400 py-8">
+        Loading links table...
+      </p>
+
+      <div id="table-box" hidden>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold text-gray-300">Active links</h2>
+          <span id="pageControls" hidden="true" class="flex space-x-1">
+            <button
+              id="prevPageBtn"
+              class="svg-button p-1 rounded hover:bg-gray-800 disabled:opacity-30 transition-colors"
+              title="Previous Page"
+            ></button>
+            <button
+              id="nextPageBtn"
+              class="svg-button p-1 rounded hover:bg-gray-800 disabled:opacity-30 transition-colors"
+              title="Next Page"
+            ></button>
+          </span>
+        </div>
+
+        <div
+          class="bg-gray-800 bg-opacity-50 rounded-xl border border-gray-700 overflow-hidden"
+        >
+          <table class="w-full text-sm" id="links-table">
+            <thead>
+              <tr
+                class="border-b border-gray-700 bg-gray-800 text-left text-xs font-medium text-gray-400 uppercase tracking-wider"
+              >
+                <th class="px-4 py-3 w-10">#</th>
+                <th class="px-4 py-3" id="short-url-header">Short URL</th>
+                <th class="px-4 py-3">Long URL</th>
+                <th class="px-4 py-3 text-center" name="expiryColumn">
+                  Expiry
+                </th>
+                <th class="px-4 py-3 text-center" name="actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="url-table">
+              <!-- The links would be inserted here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <!-- Login dialog -->
+    <dialog id="login-dialog" closedby="none" class="umamurl-dialog max-w-sm">
+      <form class="space-y-4 text-center" name="login-form">
+        <p class="text-gray-300 font-medium">
+          Please enter password to access this website
+        </p>
+        <div class="relative">
+          <input type="password" id="password" class="umamurl-input pr-10" />
+          <button
+            type="button"
+            id="password-eye-button"
+            title="Toggle Password Visibility"
+            class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300 bg-transparent border-none cursor-pointer"
+          >
+            &#x1F441;
+          </button>
+        </div>
+        <button
+          class="w-full rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-medium transition-colors cursor-pointer"
+          value="default"
+        >
+          Log in
+        </button>
+        <p id="wrong-pass" hidden class="text-red-400 text-sm">
+          Wrong password!
+        </p>
+      </form>
+    </dialog>
+
+    <!-- Edit dialog -->
+    <dialog id="edit-dialog" class="umamurl-dialog max-w-md">
+      <form class="space-y-4" name="edit-form">
+        <p class="text-gray-300">
+          Enter new long URL for
+          <span id="edit-link" class="font-semibold text-blue-400"
+            >placeholder</span
+          >. <br />
+          <span class="text-xs text-gray-500"
+            >Please check twice before you submit. It cannot be undone.</span
+          >
+        </p>
+        <input type="url" id="edited-url" class="umamurl-input" />
+        <div class="flex justify-end space-x-2">
+          <button
+            id="edit-cancel-button"
+            type="button"
+            class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            class="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-medium transition-colors cursor-pointer"
+            value="default"
+          >
+            Submit
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Setup dialog -->
+    <dialog id="setup-dialog" closedby="none" class="umamurl-dialog max-w-sm">
+      <form class="space-y-4" name="setup-form">
+        <p class="text-gray-300 font-medium">
+          No password configured. Set one to secure your instance.
+        </p>
+        <input
+          type="password"
+          id="setup-password"
+          placeholder="Password"
+          required
+          class="umamurl-input"
+        />
+        <input
+          type="password"
+          id="setup-password-confirm"
+          placeholder="Confirm password"
+          required
+          class="umamurl-input"
+        />
+        <p id="setup-error" hidden class="text-red-400 text-sm"></p>
+        <div class="flex space-x-2">
+          <button
+            class="flex-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-medium transition-colors cursor-pointer"
+            value="default"
+          >
+            Set password
+          </button>
+          <button
+            id="setup-skip-button"
+            type="button"
+            class="flex-1 rounded-lg border border-gray-600 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 transition-colors cursor-pointer"
+          >
+            Skip
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Settings dialog -->
+    <dialog id="settings-dialog" class="umamurl-dialog max-w-md">
+      <form class="space-y-4" name="settings-form">
+        <h3 class="text-lg font-semibold text-gray-100">Umami Analytics</h3>
+        <p id="settings-env-notice" hidden class="text-xs text-yellow-400 bg-yellow-900 bg-opacity-30 rounded-lg px-3 py-2">
+          Configuration is set via environment variables and cannot be changed here.
+        </p>
+        <div>
+          <label for="umami-url" class="block text-sm font-medium text-gray-400 mb-1">Umami URL</label>
+          <input
+            type="url"
+            id="umami-url"
+            placeholder="https://your-umami-instance.com"
+            class="umamurl-input"
+          />
+        </div>
+        <div>
+          <label for="umami-website-id" class="block text-sm font-medium text-gray-400 mb-1">Website ID</label>
+          <input
+            type="text"
+            id="umami-website-id"
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            class="umamurl-input"
+          />
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button
+            id="settings-cancel-button"
+            type="button"
+            class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            id="settings-save-button"
+            class="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-medium transition-colors cursor-pointer"
+            value="default"
+          >
+            Save
+          </button>
+        </div>
+        <p id="settings-status" hidden class="text-sm"></p>
+      </form>
+    </dialog>
+
+    <!-- QR Code dialog -->
+    <dialog id="qr-code-dialog" class="umamurl-dialog p-4">
+      <a class="qr-button" id="qr-download" href="">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+        >
+          <path
+            fill="currentColor"
+            fill-rule="evenodd"
+            d="M5 16.25a.75.75 0 0 1 .75.75v2c0 .138.112.25.25.25h12a.25.25 0 0 0 .25-.25v-2a.75.75 0 0 1 1.5 0v2A1.75 1.75 0 0 1 18 20.75H6A1.75 1.75 0 0 1 4.25 19v-2a.75.75 0 0 1 .75-.75"
+            clip-rule="evenodd"
+          />
+          <path
+            fill="currentColor"
+            d="M10.738 3.75a.992.992 0 0 0-.988.906a36.618 36.618 0 0 0-.082 5.27c-.247.013-.493.03-.74.047l-1.49.109a.76.76 0 0 0-.585 1.167a15.555 15.555 0 0 0 4.032 4.258l.597.429a.888.888 0 0 0 1.036 0l.597-.429a15.556 15.556 0 0 0 4.032-4.258a.76.76 0 0 0-.585-1.167l-1.49-.109a42.274 42.274 0 0 0-.74-.047a36.62 36.62 0 0 0-.081-5.27a.992.992 0 0 0-.989-.906z"
+          />
+        </svg>
+      </a>
+      <button class="qr-button" id="qr-close">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+        >
+          <g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd">
+            <path
+              d="M5.47 5.47a.75.75 0 0 1 1.06 0l12 12a.75.75 0 1 1-1.06 1.06l-12-12a.75.75 0 0 1 0-1.06"
+            />
+            <path
+              d="M18.53 5.47a.75.75 0 0 1 0 1.06l-12 12a.75.75 0 0 1-1.06-1.06l12-12a.75.75 0 0 1 1.06 0"
+            />
+          </g>
+        </svg>
+      </button>
+      <div id="qr-code"></div>
+    </dialog>
+  </body>
+</html>
