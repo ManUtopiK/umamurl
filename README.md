@@ -34,13 +34,6 @@ Most URL shorteners ship with features you don't need. Umamurl takes a different
 | Mobile-friendly dark UI       | Responsive design with Tailwind CSS                                         |
 | ACID-compliant SQLite         | WAL mode recommended for performance, configurable durability               |
 
-## Screenshots
-
-<p align="middle">
-  <img src="screenshot-desktop.webp" height="250" alt="desktop screenshot" />
-  <img src="screenshot-mobile.webp" height="250" alt="mobile screenshot" />
-</p>
-
 ## Quick start
 
 ```bash
