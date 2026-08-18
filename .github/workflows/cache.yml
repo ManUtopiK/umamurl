@@ -1,0 +1,58 @@
+# Publishes the Nix build to the ai-server binary cache (Cloudflare R2, served
+# at https://cache.serveur-ia.fr) so consumers substitute the binary instead of
+# compiling this crate.
+#
+# The store path is pinned by THIS repo's flake.lock, so it only changes when
+# umamurl itself is updated — a consumer bumping its own nixpkgs never
+# invalidates it. That only holds while the consumer does not `follows` our
+# nixpkgs input; doing so re-hashes the derivation and forces a from-source
+# build.
+#
+# Pull requests build but never push: the R2 credentials are only used on
+# pushes to main. GitHub already withholds secrets from fork PRs — the explicit
+# condition means a change to that behaviour cannot silently expose them.
+
+name: Build and cache
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Build
+        id: build
+        run: echo "out=$(nix build -L --no-link --print-out-paths .)" >> "$GITHUB_OUTPUT"
+
+      - name: Push to cache.serveur-ia.fr
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          CACHE_SIGNING_KEY: ${{ secrets.CACHE_SIGNING_KEY }}
+          OUT: ${{ steps.build.outputs.out }}
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$CACHE_SIGNING_KEY" ]; then
+            echo "R2 credentials not configured — skipping cache push"
+            exit 0
+          fi
+          # The signing key is passed as a FILE path: nix reads it itself, so the
+          # key never lands in the process arguments or in a log line.
+          KEYF=$(mktemp); printf '%s\n' "$CACHE_SIGNING_KEY" > "$KEYF"; chmod 600 "$KEYF"
+          DEST="s3://ai-server-cache?endpoint=$R2_ENDPOINT&region=auto&secret-key=$KEYF"
+          nix copy --to "$DEST" "$OUT"
+          rm -f "$KEYF"
+          echo "pushed: $OUT"
