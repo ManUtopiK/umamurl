@@ -41,7 +41,12 @@ chrono = "0.4.44"
 tokio = "1.50.0"
 log = "0.4.29"
 env_logger = "0.11.9"
-reqwest = { version = "0.12", features = ["json"] }
+# rustls instead of the default native-tls: no OpenSSL to link, so the binary
+# can be built fully static against musl. CA roots are compiled in
+# (webpki-roots), so it does not depend on the host trust store either.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "charset", "http2", "system-proxy"] }
+# musl's allocator serialises under concurrent load; mimalloc does not.
+mimalloc = "0.1"
 
 [dev-dependencies]
 actix-http = "3.12.0"

@@ -14,6 +14,11 @@ use rusqlite::Connection;
 use std::{fs, io::Result};
 use tokio::{spawn, time};
 
+// The static musl build would otherwise use musl's allocator, which is slow
+// under concurrent load.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 // Import modules
 mod auth;
 mod config;

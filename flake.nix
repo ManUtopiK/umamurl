@@ -17,7 +17,8 @@
 
   outputs = { self, nixpkgs }:
     let
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      # No x86_64-darwin: nixpkgs 26.11 dropped it and throws on evaluation.
+      supportedSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
     in
     {
@@ -25,9 +26,8 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           inherit (pkgs) lib;
-        in
-        {
-          default = pkgs.rustPlatform.buildRustPackage {
+
+          umamurl = { rustPlatform }: rustPlatform.buildRustPackage {
             pname = "umamurl";
             version = "1.0.0";
 
@@ -46,9 +46,6 @@
             # `fetchurl` instead of nixpkgs' `fetchCargoVendor`, whose bare
             # python-requests User-Agent is 403-blocked by crates.io.
             cargoLock.lockFile = ./actix/Cargo.lock;
-
-            nativeBuildInputs = [ pkgs.pkg-config ];
-            buildInputs = [ pkgs.openssl ];
 
             # The server resolves its assets relative to the working directory;
             # point it at the store copy installed below.
@@ -69,6 +66,18 @@
               mainProgram = "umamurl";
               platforms = supportedSystems;
             };
+          };
+        in
+        {
+          # On Linux the binary is linked statically against musl, so its
+          # runtime closure is the binary and its resources: no glibc, no
+          # libgcc pulled in from our nixpkgs pin. TLS is rustls (no OpenSSL)
+          # and the allocator is mimalloc (see actix/src/main.rs).
+          default = pkgs.callPackage umamurl {
+            rustPlatform =
+              if pkgs.stdenv.hostPlatform.isLinux
+              then pkgs.pkgsStatic.rustPlatform
+              else pkgs.rustPlatform;
           };
         }
       );

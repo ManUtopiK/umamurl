@@ -14,7 +14,7 @@ use argon2::{password_hash::PasswordHash, Argon2, PasswordVerifier};
 use log::{debug, info, warn};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use std::env;
+use std::{env, sync::LazyLock};
 
 use crate::AppState;
 use crate::{auth, database};
@@ -23,6 +23,10 @@ use UmamurlError::{ClientError, ServerError};
 
 // Store the version number
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// Shared across requests: building a client loads the CA roots and the TLS
+// config, and each client owns its own connection pool.
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
 // Error types
 pub enum UmamurlError {
@@ -496,7 +500,7 @@ fn send_umami_event(
     let page_url = format!("/{shortlink}");
 
     tokio::spawn(async move {
-        let client = reqwest::Client::new();
+        let client = &*HTTP_CLIENT;
         let payload = serde_json::json!({
             "type": "event",
             "payload": {
