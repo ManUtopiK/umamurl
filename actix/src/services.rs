@@ -10,7 +10,7 @@ use actix_web::{
     web::{self, Redirect},
     Either, HttpRequest, HttpResponse, Responder,
 };
-use argon2::{password_hash::PasswordHash, Argon2, PasswordVerifier};
+use argon2::{password_hash::phc::PasswordHash, Argon2, PasswordVerifier};
 use log::{debug, info, warn};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -647,12 +647,10 @@ pub async fn set_password(req: String, data: web::Data<AppState>) -> HttpRespons
         });
     }
 
-    // Hash with Argon2 and store in DB
-    use argon2::password_hash::{rand_core::OsRng, SaltString};
+    // Hash with Argon2 (random salt from the OS) and store in DB
     use argon2::PasswordHasher;
-    let salt = SaltString::generate(&mut OsRng);
-    let hash = Argon2::default()
-        .hash_password(req.as_bytes(), &salt)
+    let hash: PasswordHash = Argon2::default()
+        .hash_password(req.as_bytes())
         .expect("Error hashing password.");
 
     match database::set_setting("password", &hash.to_string(), &data.db) {

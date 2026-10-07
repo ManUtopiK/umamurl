@@ -514,3 +514,22 @@ async fn link_editing() {
 
     let _ = fs::remove_file(format!("/tmp/umamurl-test-{test}.sqlite"));
 }
+
+// Hashes already stored in a database must keep validating after an argon2
+// upgrade. This one was produced by argon2 0.5 (default params, argon2id).
+#[test]
+async fn stored_argon2_hash_still_validates() {
+    let test = "argon2-compat";
+    let path = format!("/tmp/umamurl-test-{test}.sqlite");
+    let _ = fs::remove_file(&path);
+    let db = database::open_db(&path, true, false);
+    database::set_setting(
+        "password",
+        "$argon2id$v=19$m=19456,t=2,p=1$E0uXx9C/768uPnM2Du5VUg$cG9/FG+JhvXdu0pramesU5MrnrNPr+GRWlVEZe57r6k",
+        &db,
+    )
+    .unwrap();
+
+    assert!(auth::validate_db_password("correct horse", &db));
+    assert!(!auth::validate_db_password("wrong horse", &db));
+}
