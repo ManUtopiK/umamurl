@@ -425,8 +425,7 @@ pub async fn set_umami_config(
 
 // 404 error page
 pub async fn error404() -> impl Responder {
-    NamedFile::open_async("./resources/static/404.html")
-        .await
+    NamedFile::open("./resources/static/404.html")
         .customize()
         .with_status(StatusCode::NOT_FOUND)
 }
@@ -548,8 +547,7 @@ pub async fn link_handler(
         }
     } else {
         Either::Right(
-            NamedFile::open_async("./resources/static/404.html")
-                .await
+            NamedFile::open("./resources/static/404.html")
                 .customize()
                 .with_status(StatusCode::NOT_FOUND),
         )

@@ -33,7 +33,7 @@ categories = ["web-programming"]
 # it only ever speaks HTTP/1.1. actix-http's HTTP/2 stack was
 # compiled but unreachable, and it pins h2 0.3 (RUSTSEC-2026-0258, no fix).
 actix-web = { version = "4.15.0", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "compress-zstd", "cookies", "unicode", "compat", "ws"] }
-actix-files = "0.6.10"
+actix-files = "0.7.0"
 rusqlite = { version = "0.40.2", features = [ "bundled" ] }
 regex = "1.12.3"
 rand = "0.10.0"
