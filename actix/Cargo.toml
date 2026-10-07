@@ -3,7 +3,7 @@
 
 [package]
 name = "umamurl"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
 # The toolchain the Nix build uses (nixpkgs pin). Keeps `cargo update` from
 # picking crates that only build with a newer local rustc.

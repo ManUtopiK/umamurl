@@ -29,7 +29,8 @@
 
           umamurl = { rustPlatform }: rustPlatform.buildRustPackage {
             pname = "umamurl";
-            version = "1.0.0";
+            # Single source of truth: the crate version (also served by /api/version).
+            version = (lib.importTOML ./actix/Cargo.toml).package.version;
 
             # Only the crate and the assets it serves. A README or CI edit must
             # not change the source hash — that would rebuild the binary and
