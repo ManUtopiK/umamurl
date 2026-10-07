@@ -2,6 +2,8 @@
 actix/target
 resources-final
 target
+result
+result-*
 
 # Ignore irrelevant dotfiles
 .vscode/
