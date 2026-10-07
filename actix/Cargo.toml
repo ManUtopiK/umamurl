@@ -5,6 +5,9 @@
 name = "umamurl"
 version = "1.0.0"
 edition = "2024"
+# The toolchain the Nix build uses (nixpkgs pin). Keeps `cargo update` from
+# picking crates that only build with a newer local rustc.
+rust-version = "1.97"
 authors = ["Emmanuel Salomon <emmanuel.salomon@gmail.com>"]
 license = "mit"
 description = "A fast, lightweight URL shortener with built-in Umami analytics."
