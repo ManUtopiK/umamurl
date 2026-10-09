@@ -1,0 +1,138 @@
+# Publishes a GitHub release when a version tag is pushed:
+#
+#   git tag -a v1.2.0 -m "umamurl 1.2.0" && git push origin main v1.2.0
+#
+# The tag must match the version in actix/Cargo.toml and CHANGELOG.md must
+# have a section for it: the release notes are that section. A tag with a
+# suffix (v1.2.0-rc.1) is published as a pre-release.
+#
+# Each release ships one archive per architecture with the static musl binary
+# (the flake's `portable` package) and its resources, to run on any Linux
+# without Nix. Nix users keep substituting from cache.serveur-ia.fr: that is
+# cache.yml's job, on pushes to main.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the tag against Cargo.toml and CHANGELOG.md
+        id: version
+        run: |
+          tag_version=${GITHUB_REF_NAME#v}
+          cargo_version=$(sed -n 's/^version = "\(.*\)"$/\1/p' actix/Cargo.toml | head -1)
+          if [ "$tag_version" != "$cargo_version" ]; then
+            echo "::error file=actix/Cargo.toml::Tag $GITHUB_REF_NAME does not match version $cargo_version in actix/Cargo.toml"
+            exit 1
+          fi
+          if ! .github/scripts/changelog-section.sh "$tag_version" > /dev/null; then
+            echo "::error file=CHANGELOG.md::No section for $tag_version in CHANGELOG.md"
+            exit 1
+          fi
+          echo "version=$tag_version" >> "$GITHUB_OUTPUT"
+          case $tag_version in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      NAME: umamurl-${{ needs.check.outputs.version }}-${{ matrix.arch }}-linux-musl
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Build
+        run: nix build -L .#portable
+
+      - name: Assemble the archive
+        run: |
+          mkdir -p "dist/$NAME"
+          install -m 755 result/bin/umamurl "dist/$NAME/"
+          cp -r result/share/umamurl/resources "dist/$NAME/"
+          cp LICENSE README.md CHANGELOG.md "dist/$NAME/"
+          chmod -R u+w "dist/$NAME"
+          tar -C dist -czf "dist/$NAME.tar.gz" "$NAME"
+          (cd dist && sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256")
+
+      # Run what users will run: the extracted archive, outside the Nix store.
+      - name: Smoke test the archive
+        run: |
+          mkdir smoke && tar -C smoke -xzf "dist/$NAME.tar.gz"
+          cd "smoke/$NAME"
+          trap 'rc=$?; [ "$rc" -eq 0 ] || { echo "--- server.log"; cat server.log; }; exit "$rc"' EXIT
+          # Static either way: static-pie on x86_64, plain static on aarch64.
+          file umamurl | tee /dev/stderr | grep -Eq 'static-pie linked|statically linked'
+          env -i port=4567 db_url=./urls.sqlite ./umamurl > server.log 2>&1 &
+          pid=$!
+          for _ in $(seq 50); do curl -fs -o /dev/null http://localhost:4567/ && break; sleep 0.2; done
+          curl -fs -o /dev/null http://localhost:4567/
+          curl -fs -o /dev/null http://localhost:4567/static/styles.css
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4567/nope)" = 404
+          test "$(curl -s http://localhost:4567/api/version)" = "Umamurl v${{ needs.check.outputs.version }}"
+          kill "$pid"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.NAME }}
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+
+  release:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          .github/scripts/changelog-section.sh "$VERSION" > notes.md
+          flags=()
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag \
+            --title "umamurl $VERSION" \
+            --notes-file notes.md \
+            "${flags[@]}"

@@ -68,8 +68,7 @@
               platforms = supportedSystems;
             };
           };
-        in
-        {
+
           # On Linux the binary is linked statically against musl, so its
           # runtime closure is the binary and its resources: no glibc, no
           # libgcc pulled in from our nixpkgs pin. TLS is rustls (no OpenSSL)
@@ -80,6 +79,16 @@
               then pkgs.pkgsStatic.rustPlatform
               else pkgs.rustPlatform;
           };
+        in
+        {
+          inherit default;
+        }
+        // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          # The same static binary without the store path patched in: it reads
+          # ./resources/ from the working directory, as upstream does. This is
+          # what the release archives ship (.github/workflows/release.yml), to
+          # run on any Linux without Nix.
+          portable = default.overrideAttrs { postPatch = ""; };
         }
       );
     };
