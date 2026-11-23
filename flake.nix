@@ -48,6 +48,13 @@
             # python-requests User-Agent is 403-blocked by crates.io.
             cargoLock.lockFile = ./actix/Cargo.lock;
 
+            # Since the 2026-11-21 nixos-unstable, nixpkgs' cargo setup hook
+            # makes -sys crates link system libraries (ZSTD_SYS_USE_PKG_CONFIG…)
+            # instead of their vendored copies. The static build has no
+            # pkg-config entry for them and zstd-sys fails: keep the vendored
+            # builds this crate was written for.
+            dontCargoUseSystemLibs = true;
+
             # The server resolves its assets relative to the working directory;
             # point it at the store copy installed below.
             postPatch = ''
